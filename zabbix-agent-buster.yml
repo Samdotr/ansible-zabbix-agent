@@ -1,0 +1,66 @@
+---
+- hosts: buster
+  become: true
+  become_user: root
+  pre_tasks:
+    - name: Remove zabbix-agent package
+      apt:
+        name: zabbix-agent
+        state: absent
+    - name: Zabbix Agent | Make sure the service is unmasked
+      systemd:
+        name: zabbix-agent
+        masked: no
+    - name: Delete Zabbix directory
+      file:
+        state: absent
+        path: /etc/zabbix/
+
+    - name: Remove Zabbix 4.4 repository on Debian 10 Buster
+      ansible.builtin.apt_repository:
+        repo: deb http://repo.zabbix.com/zabbix/4.4/debian/ buster main
+        state: absent
+
+  tasks:
+    - name: Recreate Zabbix directory
+      file:
+        state: directory
+        path: /etc/zabbix/
+
+    - name: Create Zabbix conf.d directory
+      file:
+        state: directory
+        path: /etc/zabbix/zabbix_agentd.conf.d/
+
+    - name: Download Zabbix deb file
+      apt:
+        deb: https://repo.zabbix.com/zabbix/5.0/debian/pool/main/z/zabbix-release/zabbix-release_5.0-1+buster_all.deb
+
+    - name: Run the equivalent of "apt-get update" as a separate step
+      apt:
+        update_cache: yes
+
+    - name: Download zabbix_agentd.conf
+      get_url:
+        url: https://YOUR-WEB-SERVER/zabbix_agentd.conf
+        dest: /etc/zabbix/zabbix_agentd.conf
+        mode: '0644'
+
+    - name: Recursively change ownership of a directory
+      ansible.builtin.file:
+        path: /etc/zabbix
+        state: directory
+        recurse: yes
+        owner: zabbix
+        group: zabbix
+
+    - name: Install the new zabbix-agent package
+      apt:
+        name: zabbix-agent
+        state: present
+
+    - name: Restart Zabbix agent service, in all cases, also issue daemon-reload to pick up config changes
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        name: zabbix-agent
